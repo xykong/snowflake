@@ -11,30 +11,49 @@ import (
 	"time"
 )
 
+//noinspection GoVarAndConstTypeMayBeOmitted
 var (
 	// Epoch is set to the twitter snowflake epoch of Nov 04 2010 01:42:54 UTC
 	// You may customize this to set a different epoch for your application.
-	Epoch int64 = 1288834974657
+	Epoch int64 = 1363583123456
 
 	// Number of bits to use for Node
 	// Remember, you have a total 22 bits to share between Node/Step
-	NodeBits uint8 = 10
+	NodeBits uint8 = 12
 
 	// Number of bits to use for Step
 	// Remember, you have a total 22 bits to share between Node/Step
-	StepBits uint8 = 12
+	StepBits uint8 = 10
 
-	nodeMax   int64 = -1 ^ (-1 << NodeBits)
-	nodeMask  int64 = nodeMax << StepBits
-	stepMask  int64 = -1 ^ (-1 << StepBits)
-	timeShift uint8 = NodeBits + StepBits
-	nodeShift uint8 = StepBits
+	// Number of bits to use for Time
+	// Remember, you have a total 64 bits to share between Unused/Time/Node/Step
+	TimeBits uint8 = 64 - 1 - NodeBits - StepBits
+
+	Order ItemOrder = OrderNodeStepTime
+
+	nodeMax  int64 = -1 ^ (-1 << NodeBits)
+	nodeMask int64 = nodeMax << StepBits
+	stepMask int64 = -1 ^ (-1 << StepBits)
+
+	timeShift uint8 = 0
+	nodeShift uint8 = 0
+	stepShift uint8 = 0
 )
 
+type ItemOrder int
+
+const (
+	OrderTimeNodeStep ItemOrder = iota
+	OrderStepNodeTime
+	OrderNodeStepTime
+)
+
+//noinspection SpellCheckingInspection
 const encodeBase32Map = "ybndrfg8ejkmcpqxot1uwisza345h769"
 
 var decodeBase32Map [256]byte
 
+//noinspection SpellCheckingInspection
 const encodeBase58Map = "123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
 
 var decodeBase58Map [256]byte
@@ -90,15 +109,30 @@ type ID int64
 func NewNode(node int64) (*Node, error) {
 
 	if node < 0 || node > nodeMax {
-		return nil, errors.New("Node number must be between 0 and 1023")
+		return nil, errors.New("node number must be between 0 and 1023")
 	}
 
 	// re-calc in case custom NodeBits or StepBits were set
 	nodeMax = -1 ^ (-1 << NodeBits)
 	nodeMask = nodeMax << StepBits
 	stepMask = -1 ^ (-1 << StepBits)
-	timeShift = NodeBits + StepBits
-	nodeShift = StepBits
+
+	switch Order {
+	case OrderTimeNodeStep:
+		timeShift = NodeBits + StepBits
+		nodeShift = StepBits
+		stepShift = 0
+	case OrderStepNodeTime:
+		timeShift = 0
+		nodeShift = TimeBits
+		stepShift = TimeBits + NodeBits
+	case OrderNodeStepTime:
+		timeShift = 0
+		nodeShift = TimeBits + StepBits
+		stepShift = TimeBits
+	default:
+		return nil, errors.New("node order must set a valid value")
+	}
 
 	return &Node{
 		time: 0,
@@ -130,7 +164,7 @@ func (n *Node) Generate() ID {
 
 	r := ID((now-Epoch)<<timeShift |
 		(n.node << nodeShift) |
-		(n.step),
+		(n.step << stepShift),
 	)
 
 	n.mu.Unlock()
@@ -159,8 +193,8 @@ func (f ID) Base36() string {
 
 // Base32 uses the z-base-32 character set but encodes and decodes similar
 // to base58, allowing it to create an even smaller result string.
-// NOTE: There are many different base32 implementations so becareful when
-// doing any interoperation interop with other packages.
+// NOTE: There are many different base32 implementations so be careful when
+// doing any inter operation with other packages.
 func (f ID) Base32() string {
 
 	if f < 32 {
@@ -182,8 +216,8 @@ func (f ID) Base32() string {
 }
 
 // ParseBase32 parses a base32 []byte into a snowflake ID
-// NOTE: There are many different base32 implementations so becareful when
-// doing any interoperation interop with other packages.
+// NOTE: There are many different base32 implementations so be careful when
+// doing any inter operation with other packages.
 func ParseBase32(b []byte) (ID, error) {
 
 	var id int64
