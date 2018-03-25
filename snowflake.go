@@ -49,6 +49,11 @@ const (
 )
 
 //noinspection SpellCheckingInspection
+const encodeReadable = "ABCDEFGHJKLMNPQRTUVWXY0123456789"
+
+var decodeReadableMap [256]byte
+
+//noinspection SpellCheckingInspection
 const encodeBase32Map = "ybndrfg8ejkmcpqxot1uwisza345h769"
 
 var decodeBase32Map [256]byte
@@ -83,6 +88,14 @@ func init() {
 	for i := 0; i < len(encodeBase32Map); i++ {
 		decodeBase32Map[encodeBase32Map[i]] = byte(i)
 	}
+
+	for i := 0; i < len(encodeReadable); i++ {
+		decodeReadableMap[i] = 0xFF
+	}
+
+	for i := 0; i < len(encodeReadable); i++ {
+		decodeReadableMap[encodeReadable[i]] = byte(i)
+	}
 }
 
 // ErrInvalidBase58 is returned by ParseBase58 when given an invalid []byte
@@ -90,6 +103,9 @@ var ErrInvalidBase58 = errors.New("invalid base58")
 
 // ErrInvalidBase32 is returned by ParseBase32 when given an invalid []byte
 var ErrInvalidBase32 = errors.New("invalid base32")
+
+// ErrInvalidReadable is returned by ParseBase when given an invalid []byte
+var ErrInvalidReadable = errors.New("invalid readable")
 
 // A Node struct holds the basic information needed for a snowflake generator
 // node
@@ -189,6 +205,47 @@ func (f ID) Base2() string {
 // Base36 returns a base36 string of the snowflake ID
 func (f ID) Base36() string {
 	return strconv.FormatInt(int64(f), 36)
+}
+
+// Base32 uses the z-base-32 character set but encodes and decodes similar
+// to base58, allowing it to create an even smaller result string.
+// NOTE: There are many different base32 implementations so be careful when
+// doing any inter operation with other packages.
+func (f ID) BaseReadable() string {
+
+	if f < 32 {
+		return string(encodeReadable[f])
+	}
+
+	b := make([]byte, 0, 12)
+	for f >= 32 {
+		b = append(b, encodeReadable[f%32])
+		f /= 32
+	}
+	b = append(b, encodeReadable[f])
+
+	for x, y := 0, len(b)-1; x < y; x, y = x+1, y-1 {
+		b[x], b[y] = b[y], b[x]
+	}
+
+	return string(b)
+}
+
+// ParseBase32 parses a base32 []byte into a snowflake ID
+// NOTE: There are many different base32 implementations so be careful when
+// doing any inter operation with other packages.
+func ParseBaseReadable(b []byte) (ID, error) {
+
+	var id int64
+
+	for i := range b {
+		if decodeReadableMap[b[i]] == 0xFF {
+			return -1, ErrInvalidReadable
+		}
+		id = id*32 + int64(decodeReadableMap[b[i]])
+	}
+
+	return ID(id), nil
 }
 
 // Base32 uses the z-base-32 character set but encodes and decodes similar

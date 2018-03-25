@@ -52,6 +52,25 @@ func TestUnmarshalJSON(t *testing.T) {
 	}
 }
 
+func TestBaseReadable(t *testing.T) {
+
+	node, _ := NewNode(1)
+
+	for i := 0; i < 100; i++ {
+
+		sf := node.Generate()
+		b32i := sf.BaseReadable()
+		t.Logf("Generate: %v, %v", sf, b32i)
+		psf, err := ParseBaseReadable([]byte(b32i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sf != psf {
+			t.Fatal("Parsed does not match String.")
+		}
+	}
+}
+
 func TestBase32(t *testing.T) {
 
 	node, _ := NewNode(1)
