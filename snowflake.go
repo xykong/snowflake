@@ -133,6 +133,8 @@ func NewNode(node int64) (*Node, error) {
 	nodeMask = nodeMax << StepBits
 	stepMask = -1 ^ (-1 << StepBits)
 
+	TimeBits = 64 - 1 - NodeBits - StepBits
+
 	switch Order {
 	case OrderTimeNodeStep:
 		timeShift = NodeBits + StepBits
